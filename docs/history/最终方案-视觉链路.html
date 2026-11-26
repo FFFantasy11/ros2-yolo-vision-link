@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>树莓派 USB 摄像头 + ROS2 + Web 端 YOLO 视觉链路 · 方案定稿</title>
+<style>
+:root{
+  --bg:#f6f5f2; --panel:#ffffff; --ink:#1b1f23; --ink-soft:#39424a;
+  --muted:#6b757d; --line:#e4e2dc; --accent:#1d5b8a; --accent-soft:#e9f1f7;
+  --warn:#a8334a; --warn-soft:#f9ebee; --ok:#2c7350; --ok-soft:#e6f2ec;
+  --code-bg:#1b1f23; --code-ink:#e8e6e1; --radius:12px;
+}
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:900px; margin:0 auto; padding:0 22px;}
+
+.hero{padding:44px 0 26px; border-bottom:1px solid var(--line);}
+.eyebrow{margin:0 0 12px; font-size:12px; letter-spacing:.16em; color:var(--accent); font-weight:600;}
+.hero h1{margin:0 0 10px; font-size:27px; line-height:1.35; font-weight:700; letter-spacing:-.01em;}
+.hero p{margin:0; color:var(--muted); font-size:14px;}
+.meta{margin-top:18px; display:flex; flex-wrap:wrap; gap:8px;}
+.chip{font-size:12px; padding:3px 10px; border-radius:20px; background:var(--panel); border:1px solid var(--line); color:var(--ink-soft);}
+
+section{padding:30px 0 6px;}
+h2{font-size:19px; margin:0 0 4px; font-weight:650; letter-spacing:-.01em;}
+.sub{color:var(--muted); font-size:13.5px; margin:0 0 16px;}
+h3{font-size:15px; margin:22px 0 6px; font-weight:600;}
+p{margin:10px 0;}
+ul,ol{margin:8px 0 8px; padding-left:22px;}
+li{margin:4px 0;}
+
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:20px 24px; margin-bottom:16px;}
+.card h2{margin-top:0;}
+
+.table-wrap{overflow-x:auto; margin:12px 0;}
+table{border-collapse:collapse; width:100%; font-size:13.5px; background:var(--panel);}
+th,td{padding:9px 11px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top;}
+th{font-weight:600; color:var(--ink-soft); background:#faf9f6; font-size:12.5px; white-space:nowrap;}
+tbody tr:last-child td{border-bottom:none;}
+td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; color:#4a3f35;}
+
+.note{border-left:3px solid var(--accent); background:var(--accent-soft); padding:11px 15px; border-radius:0 8px 8px 0; margin:14px 0; font-size:13.5px; color:var(--ink-soft);}
+.note.warn{border-color:var(--warn); background:var(--warn-soft);}
+.note.ok{border-color:var(--ok); background:var(--ok-soft);}
+.note b{color:var(--ink);}
+
+code.inline{background:#f2f0ea; padding:1px 5px; border-radius:4px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; color:#4a3f35;}
+
+.tradeoff{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:14px 0;}
+.tradeoff > div{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px;}
+.tradeoff h4{margin:0 0 6px; font-size:13.5px; font-weight:600;}
+.tradeoff .yes h4{color:var(--ok);}
+.tradeoff .no h4{color:var(--warn);}
+.tradeoff ul{margin:0; padding-left:18px; font-size:13px; color:var(--ink-soft);}
+
+.phase{display:flex; gap:14px; padding:14px 0; border-top:1px solid #f0eee9;}
+.phase:first-child{border-top:none; padding-top:4px;}
+.pnum{flex:none; width:34px; height:34px; border-radius:9px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600;}
+.pnum.todo{background:#e9e7e1; color:var(--muted);}
+.pbody{flex:1;}
+.pbody h4{margin:2px 0 3px; font-size:14.5px; font-weight:600;}
+.pbody .goal{font-size:13px; color:var(--ink-soft); margin:0 0 5px;}
+.pbody .out{font-size:12.5px; color:var(--muted); font-family:ui-monospace,Menlo,Consolas,monospace;}
+
+footer{padding:26px 0 50px; border-top:1px solid var(--line); margin-top:24px; color:var(--muted); font-size:12.5px;}
+
+@media (max-width:640px){
+  .tradeoff{grid-template-columns:1fr;}
+  .hero h1{font-size:22px;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div style="margin:0 0 18px;padding:12px 16px;border-left:4px solid #c0891f;background:#fdf6e6;color:#4a3a12;border-radius:8px;font-size:14px;line-height:1.7;">
+  <b>2026-11-26 更新：</b>本页是 <b>Python 版本</b> 的方案定稿。当前实现已重构为标准 ROS 2 工作空间（<code>ros2_ws/src</code>）：采集端与链路探针改为 <b>C++</b>，推理节点因 PyTorch 依赖保留 <b>Python</b>。参数与链路设计不变，目录与启动方式见 <a href="../README.md" style="color:#1d5b8a;">README.md</a>。
+</div>
+
+<div class="hero">
+  <p class="eyebrow">方案定稿 · 2026-11-23</p>
+  <h1>树莓派 USB 摄像头 → ROS2 → 主机 YOLO → Web 界面</h1>
+  <p>把讨论中定下的每一个岔路口收敛成一条可执行的技术路径。参数已定，剩下的是验证。</p>
+  <div class="meta">
+    <span class="chip">Pi 5 · Ubuntu 24.04 · Jazzy</span>
+    <span class="chip">海尔 mini R Pro · 8745HS · 32GB</span>
+    <span class="chip">采集层已于 11-24 修订</span>
+    <span class="chip">yolov8n · PyTorch CPU · 实测 17.7 ms</span>
+    <span class="chip">推理层已于 11-26 实测</span>
+    <span class="chip">链路层 11-26 实测 · 直连 RTT 0.25 ms</span>
+    <span class="chip">网线直连 192.168.10.0/24</span>
+  </div>
+</div>
+
+<section>
+  <h2>一句话结论</h2>
+  <p class="sub">Pi 只做"搬运工"，所有智能都放在那台 8 核 Zen4 上，界面用浏览器渲染。</p>
+  <div class="note warn" style="margin-top:0; margin-bottom:14px">
+    <b>采集层已修订（2026-11-24 实测）。</b>原计划的 <code class="inline">v4l2_camera</code> + MJPG 720p30 走不通：该包没有 MJPG 解码路径，启动即 <code class="inline">cv_bridge</code> 抛异常 abort；<code class="inline">usb_cam</code> 的 <code class="inline">raw_mjpeg</code> 则直接 Segmentation fault。最终实测可用的是 <b><code class="inline">usb_cam</code> + YUYV 640×480 @ 19.9fps + <code class="inline">republish</code> q80</b>，单帧 60 KB，带宽 <b>1.26 MB/s（10 Mbps）</b>。下面凡是涉及 720p / MJPG / 25 Mbps 的数字都按此折算（推理位置、Web 界面、延迟结构三部分结论不受影响）。
+  </div>
+  <div class="card">
+    <p style="margin-top:0"><b>树莓派 5 用 <code class="inline">usb_cam</code> 采 UVC 摄像头的 YUYV 原始帧（640×480），经 <code class="inline">republish</code> 压成 <code class="inline">CompressedImage</code> 走 DDS，通过千兆网线送到海尔主机；主机上的 rclpy 节点解码后交给 ONNX Runtime 跑 yolov8n，检测框坐标随帧下发，由 FastAPI 用 WebSocket 推给浏览器 canvas 前后端分层绘制。</b></p>
+    <p style="margin-bottom:0; color:var(--muted); font-size:13.5px">1080p 以上的分辨率全部放弃，H.264 硬编码不存在，CUDA 不可用，虚拟机退出主链路，rosbridge 不参与，Electron 不做。这些否掉的选择在下面"决策记录"里都有理由。</p>
+  </div>
+</section>
+
+<section>
+  <h2>最终架构</h2>
+  <p class="sub">五个环节，两个进程边界，一条物理链路。</p>
+
+  <svg viewBox="0 0 880 350" width="100%" style="display:block; margin:6px 0 4px" role="img" aria-label="视觉链路架构图">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="#8a949b"/>
+      </marker>
+    </defs>
+
+    <!-- 采集端外框 -->
+    <rect x="140" y="40" width="230" height="200" rx="12" fill="#ffffff" stroke="#e4e2dc"/>
+    <text x="152" y="62" font-size="11" font-weight="600" fill="#1d5b8a" letter-spacing="1.2">采集端 · 树莓派 5</text>
+
+    <!-- 摄像头 -->
+    <rect x="18" y="82" width="104" height="120" rx="9" fill="#faf9f6" stroke="#e4e2dc"/>
+    <text x="70" y="104" font-size="12" text-anchor="middle" fill="#1b1f23" font-weight="600">UVC 摄像头</text>
+    <text x="70" y="122" font-size="10" text-anchor="middle" fill="#6b757d">YUYV 4:2:2</text>
+    <text x="70" y="139" font-size="10" text-anchor="middle" fill="#6b757d">640×480 @20fps</text>
+    <text x="70" y="156" font-size="10" text-anchor="middle" fill="#6b757d">18.4 MB/s 原始</text>
+    <line x1="70" y1="182" x2="70" y2="202" stroke="#e4e2dc"/>
+    <text x="70" y="192" font-size="9" text-anchor="middle" fill="#a8334a" font-weight="600">USB 2.0</text>
+
+    <!-- 箭头 摄像头 -> 框 -->
+    <line x1="122" y1="142" x2="150" y2="142" stroke="#8a949b" stroke-width="1.4" marker-end="url(#ar)"/>
+
+    <!-- usb_cam -->
+    <rect x="156" y="76" width="198" height="52" rx="8" fill="#e9f1f7" stroke="#c9dceb"/>
+    <text x="168" y="96" font-size="11.5" fill="#1b1f23" font-weight="600">usb_cam</text>
+    <text x="168" y="113" font-size="10" fill="#39424a">/image_raw · yuyv · 0.92 MB/帧</text>
+
+    <!-- republish -->
+    <rect x="156" y="140" width="198" height="52" rx="8" fill="#e9f1f7" stroke="#c9dceb"/>
+    <text x="168" y="160" font-size="11.5" fill="#1b1f23" font-weight="600">image_transport republish</text>
+    <text x="168" y="177" font-size="10" fill="#39424a">/image_raw/compressed · JPEG q80</text>
+
+    <line x1="255" y1="128" x2="255" y2="138" stroke="#8a949b" stroke-width="1.4" marker-end="url(#ar)"/>
+
+    <text x="152" y="222" font-size="10" fill="#6b757d">CPU 占用目标 &lt; 40%</text>
+
+    <!-- 链路 -->
+    <line x1="371" y1="142" x2="452" y2="142" stroke="#8a949b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+    <text x="411" y="118" font-size="10.5" text-anchor="middle" fill="#1d5b8a" font-weight="600">千兆网线</text>
+    <text x="411" y="132" font-size="9.5" text-anchor="middle" fill="#6b757d">DDS / UDP</text>
+    <text x="411" y="164" font-size="9.5" text-anchor="middle" fill="#6b757d">1.26 MB/s</text>
+    <text x="411" y="177" font-size="9.5" text-anchor="middle" fill="#6b757d">&lt;1 ms</text>
+
+    <!-- 主机外框 -->
+    <rect x="456" y="26" width="270" height="230" rx="12" fill="#ffffff" stroke="#e4e2dc"/>
+    <text x="468" y="48" font-size="11" font-weight="600" fill="#1d5b8a" letter-spacing="1.2">上位机 · Ubuntu 24.04 物理机</text>
+
+    <rect x="470" y="58" width="242" height="38" rx="7" fill="#f2f0ea" stroke="#e4e2dc"/>
+    <text x="481" y="74" font-size="10.5" fill="#1b1f23" font-weight="600">rclpy 订阅节点</text>
+    <text x="481" y="88" font-size="9.5" fill="#6b757d">best_effort · depth 1 · 只留最新帧</text>
+
+    <rect x="470" y="102" width="242" height="38" rx="7" fill="#f2f0ea" stroke="#e4e2dc"/>
+    <text x="481" y="118" font-size="10.5" fill="#1b1f23" font-weight="600">cv2.imdecode → 预处理 640×640</text>
+    <text x="481" y="132" font-size="9.5" fill="#6b757d">JPEG 解码 4~6 ms</text>
+
+    <rect x="470" y="146" width="242" height="38" rx="7" fill="#e6f2ec" stroke="#c3e0d2"/>
+    <text x="481" y="162" font-size="10.5" fill="#1b1f23" font-weight="600">YOLOv8n · ONNX Runtime CPU</text>
+    <text x="481" y="176" font-size="9.5" fill="#39424a">8 核 Zen4 · 推理 17.7 ms</text>
+
+    <rect x="470" y="190" width="242" height="38" rx="7" fill="#f2f0ea" stroke="#e4e2dc"/>
+    <text x="481" y="206" font-size="10.5" fill="#1b1f23" font-weight="600">NMS + 打包（不重编码）</text>
+    <text x="481" y="220" font-size="9.5" fill="#6b757d">同一条消息里带 JPEG 与本帧检测框</text>
+
+    <!-- 浏览器 -->
+    <rect x="748" y="66" width="116" height="150" rx="9" fill="#faf9f6" stroke="#e4e2dc"/>
+    <text x="806" y="88" font-size="11.5" text-anchor="middle" fill="#1b1f23" font-weight="600">浏览器</text>
+    <rect x="760" y="98" width="92" height="54" rx="4" fill="#e4e2dc" stroke="none"/>
+    <rect x="782" y="112" width="34" height="26" rx="2" fill="none" stroke="#2c7350" stroke-width="1.6"/>
+    <text x="799" y="128" font-size="8" text-anchor="middle" fill="#2c7350">obj .87</text>
+    <text x="806" y="168" font-size="9.5" text-anchor="middle" fill="#6b757d">canvas 双层</text>
+    <text x="806" y="182" font-size="9.5" text-anchor="middle" fill="#6b757d">rAF 统一绘制</text>
+    <text x="806" y="196" font-size="9.5" text-anchor="middle" fill="#6b757d">中文标签 OK</text>
+
+    <line x1="727" y1="142" x2="742" y2="142" stroke="#8a949b" stroke-width="1.6" marker-end="url(#ar)"/>
+    <text x="734" y="132" font-size="9" text-anchor="middle" fill="#6b757d">WS</text>
+
+    <!-- 底部标注 -->
+    <line x1="18" y1="270" x2="864" y2="270" stroke="#e4e2dc" stroke-dasharray="2 4"/>
+    <text x="18" y="292" font-size="10.5" fill="#6b757d">端到端约 100~125 ms　·　瓶颈已不在推理（实测 17.7 ms），而在采集端的色彩空间转换，链路本身只占十几毫秒</text>
+    <text x="18" y="310" font-size="10.5" fill="#6b757d">ROS2 只负责"采集 → 传一帧图像"，不参与推理与界面；虚拟机完全退出主链路</text>
+  </svg>
+</section>
+
+<section>
+  <h2>决策记录</h2>
+  <p class="sub">每个岔路口都曾经是开放问题，这里是结论和被否掉的理由。</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:110px">决策点</th><th style="width:190px">选定</th><th>否掉的方案与理由</th></tr></thead>
+    <tbody>
+      <tr><td>上位机形态</td><td>海尔 mini 整机装 Ubuntu 24.04</td><td>VMware 无 CUDA 通路且 USB 直通影响帧率；WSL2 是「没有第二台机器」时的备选，有物理机就不该绕虚拟化层</td></tr>
+      <tr><td>摄像头挂哪</td><td>树莓派 5 的 USB 口</td><td>挂主机则传输环节消失，项目失去意义；只在测「纯算法基线」时临时插主机</td></tr>
+      <tr><td>采集节点</td><td><code class="inline">usb_cam</code>（<b>已修订</b>）</td><td>原选 <code class="inline">v4l2_camera</code> 实测不可用：无 MJPG 解码路径，启动即抛 <code class="inline">Unrecognized image encoding []</code> 并 abort；<code class="inline">camera_ros</code> 面向 Pi Camera Module 的 libcamera 通路，对 UVC 反而绕。usb_cam 的 <code class="inline">raw_mjpeg</code> 分支在本版会 segfault，只有 <code class="inline">yuyv</code> 稳定</td></tr>
+      <tr><td>像素格式</td><td>YUYV 640×480（<b>已修订</b>）</td><td>MJPG 描述符标 30fps 但实测只能到 19.9，且两套驱动都读不了它。YUYV 下 720p 被限到 10fps，640×480 才有 20fps——而 640 正好是 YOLO 的输入宽度，不用缩放</td></tr>
+      <tr><td>编码</td><td>复用摄像头输出的 JPEG</td><td>H.264：Pi 5 无硬件编码器，libx264 软编吃 2~3 核并引入队列延迟，编码器收益为负</td></tr>
+      <tr><td>传输层</td><td>ROS2 <code class="inline">CompressedImage</code></td><td>原始 <code class="inline">sensor_msgs/Image</code> 是 660 Mbps，任何网络都扛不住；rosbridge 把二进制转 base64 JSON，帧率会掉到个位数</td></tr>
+      <tr><td>YOLO 位置</td><td>主机 CPU</td><td>Pi 本地 CPU 只有 5~8 fps 且与采集抢资源；Hailo-8L 要多花 300~500 元并走模型转换流程，当前无收益</td></tr>
+      <tr><td>加速后端</td><td>ONNX Runtime CPU</td><td>ROCm：Radeon 780M 是 gfx1103，不在支持列表，需 hack 且易崩；NPU：8745HS 没有 XDNA（8845HS 才有）</td></tr>
+      <tr><td>网络</td><td>网线直连 192.168.10.0/24</td><td>手机热点约 10~20 Mbps 且抖动大、通常不转发多播、锁屏会断网；直连把「DDS 能不能通」这个最大风险项直接消掉</td></tr>
+      <tr><td>界面</td><td>Web（FastAPI + WebSocket + canvas）</td><td>rviz2 不可定制、渲染偏重，只能当调试工具；PySide6 失去远程访问能力；Electron 双运行时 +300 MB，在「推理在 Python」的架构里不划算</td></tr>
+      <tr><td>框的叠加位置</td><td>前端 canvas 画，坐标与原始 JPEG 同包下发</td><td>后端用 cv2 画框必须把解码后的图<b>重新编码</b>成 JPEG（白费 15~25 ms），且 <code class="inline">cv2.putText</code> 不支持中文；两路分开下发必然「框画在错误的帧上」，但装进同一条消息就物理上不可能错位</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>参数表</h2>
+  <p class="sub">可以直接照着写进启动命令和配置文件的数值。</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:90px">环节</th><th style="width:180px">组件 / 参数</th><th>取值与说明</th></tr></thead>
+    <tbody>
+      <tr><td>采集</td><td class="mono">pixel_format</td><td><code class="inline">yuyv</code>（<b>已修订</b>，原为 MJPG）。配 <code class="inline">io_method:=mmap</code>，<code class="inline">framerate:=30.0</code> 只是请求值，实际 19.9</td></tr>
+      <tr><td>采集</td><td class="mono">image_width / height</td><td><code class="inline">640</code> / <code class="inline">480</code>（<b>已修订</b>）。720p 在 YUYV 下只有 10fps；640 对 YOLO 的 640 输入零缩放</td></tr>
+      <tr><td>采集</td><td class="mono">v4l2 控件</td><td>顺序不能错：<code class="inline">exposure_dynamic_framerate=0</code> → <code class="inline">auto_exposure=1</code> → <code class="inline">exposure_time_absolute=30</code> → <code class="inline">gain=63</code>。出厂把「允许降帧率」设成 1，是暗光下掉到 10fps 的元凶</td></tr>
+      <tr><td>传输</td><td class="mono">QoS</td><td>全链路 <code class="inline">best_effort</code> + <code class="inline">depth 1</code>。默认的 reliable/depth5 会在抖动时积压，延迟越跑越大且永不恢复</td></tr>
+      <tr><td>传输</td><td class="mono">JPEG 质量</td><td><code class="inline">80</code>。实测 640×480 约 <b>60 KB/帧</b>，19.9fps 合 <b>1.26 MB/s（10 Mbps）</b>，千兆链路占 1%</td></tr>
+      <tr><td>推理</td><td class="mono">模型 / 输入</td><td>yolov8n · 640×640 · ONNX Runtime，<code class="inline">intra_op_num_threads=6</code> 左右（留 2 核给 ROS2 与 Web 服务）</td></tr>
+      <tr><td>推理</td><td class="mono">取帧策略</td><td>每轮只取最新一帧。20fps 与 17.7ms 推理正好匹配，正常不积压；但 <code class="inline">usb_cam</code> 默认 QoS 是 RELIABLE + depth 100（原始帧 0.92 MB，理论可积压 92 MB），跨机前必须改成 best_effort + depth 1</td></tr>
+      <tr><td>显示</td><td class="mono">消息格式</td><td>二进制帧：4 字节 JSON 头长度 + JSON（框、帧号、耗时）+ JPEG 字节</td></tr>
+      <tr><td>显示</td><td class="mono">渲染</td><td>底层 canvas 贴图 + 上层透明 canvas 画框；用 <code class="inline">requestAnimationFrame</code> 统一绘制，不在消息回调里直接画</td></tr>
+      <tr><td>网络</td><td class="mono">IP</td><td>主机 <code class="inline">192.168.10.1/24</code>、Pi <code class="inline">192.168.10.2/24</code>，<b>网关留空</b>（填了主机就上不了网，上网走 WiFi）</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>性能预期</h2>
+  <p class="sub">按硬件实测值推算，不是网上抄的数字。误差主要来自 Pi 侧编解码。</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>阶段</th><th style="width:110px">耗时</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>Pi usb_cam 采集 + YCbCr→RGB</td><td class="mono">8~12 ms</td><td>YUYV 640×480，0.92 MB/帧，四个 A76 核做色彩空间转换</td></tr>
+      <tr><td>republish 编码 JPEG q80</td><td class="mono">6~10 ms</td><td>640×480 比 720p 小 2.25 倍，编码开销同步下降；输出 60 KB/帧</td></tr>
+      <tr><td>DDS 传输（千兆直连）</td><td class="mono">3~8 ms</td><td>换手机热点这行会变成 15~30 ms 且抖动</td></tr>
+      <tr><td>主机解码 + 预处理</td><td class="mono">8~12 ms</td><td>imdecode + letterbox 缩放</td></tr>
+      <tr><td>YOLOv8n 推理</td><td class="mono">17.7 ms</td><td>8 核 Zen4 走 ONNX Runtime，AVX-512 可用</td></tr>
+      <tr><td>后处理 + 画框</td><td class="mono">3~6 ms</td><td>NMS + cv2.rectangle</td></tr>
+      <tr><td>WebSocket + canvas</td><td class="mono">15~25 ms</td><td>createImageBitmap 硬件解码 + rAF 绘制</td></tr>
+      <tr><td>显示刷新</td><td class="mono">8~16 ms</td><td>60Hz 面板一帧的等待</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="note"><b>合计约 100~125 ms。</b>还有一处可选的改进：自己写一个约 40 行的节点，用 V4L2 直接取 MJPG 原始字节塞进 <code class="inline">CompressedImage</code>，不解码不编码，能再省 15~20 ms 并降低 Pi 的 CPU。原因是现成的 <code class="inline">usb_cam raw_mjpeg</code> 在这版会 segfault，绕开它只能自己写。跑通整条链路之后再考虑，不要提前做。</div>
+  <div class="note warn"><b>要知道 120 ms 意味着什么。</b>人眼对「手一动、画面跟着动」的容忍阈值大约在 150 ms 以内，超过就会明显感到"拖"。所以这条链路适合自动检测、录制、远程观察，<b>不适合手动遥控</b>。如果有遥控需求，得回头考虑 WebRTC 或者把推理搬到边缘。</div>
+</section>
+
+<section>
+  <h2>验证状态</h2>
+  <p class="sub">2026-11-24 已在树莓派上实测，采集与传输段的三项全部落定。</p>
+  <div class="tradeoff">
+    <div class="no">
+      <h4>还必须实测</h4>
+      <ul>
+        <li>跨机之后 <code class="inline">hz</code> / <code class="inline">bw</code> 有没有衰减（本机已测，跨机待测）</li>
+        <li>Pi 跑满时的 CPU 占用与温度（会不会热降频）</li>
+        <li>主机真实推理耗时：已实测 <b>17.7 ms</b>（torch CPU、8 线程、640 输入，预热后取中位，2026-11-26）</li>
+        <li>两台机器的时钟能否对齐（影响延迟读数，不影响 hz/bw）</li>
+      </ul>
+    </div>
+    <div class="yes">
+      <h4>已实测确定</h4>
+      <ul>
+        <li>稳帧 <b>19.87 fps</b>，帧间隔 0.048~0.052s，std dev 0.002s</li>
+        <li>压缩后 <b>60 KB/帧、1.26 MB/s</b>（10 Mbps），压缩比约 15 倍</li>
+        <li>MJPG 与 YUYV 的可用分辨率/帧率已枚举，720p 在 YUYV 下只有 10fps</li>
+        <li>网线直连的带宽不是瓶颈（10 Mbps / 1000 Mbps，占 1%）</li>
+        <li>20fps 与 17.7ms 推理正好匹配，不需要丢帧策略</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>推进顺序</h2>
+  <p class="sub">每一阶段都能独立验证，不要跨阶段混做。前一步的数字是后一步的设计输入。</p>
+  <div class="card">
+    <div class="phase">
+      <div class="pnum">0</div>
+      <div class="pbody">
+        <h4>环境落地</h4>
+        <p class="goal">主机装 Ubuntu 24.04 → ROS2 Jazzy → venv（必须是 <code class="inline">--system-site-packages</code>）→ 网线直连配通</p>
+        <p class="out">产出：ros2 topic list 两端能看到对方</p>
+      </div>
+    </div>
+    <div class="phase">
+      <div class="pnum">1</div>
+      <div class="pbody">
+        <h4>链路打通</h4>
+        <p class="goal">Pi 起 usb_cam + republish，主机订阅压缩话题，量 hz / bw / CPU 三个数 —— 本机侧已实测完成（19.87 fps / 1.26 MB/s），跨机复测待做</p>
+        <p class="out">产出：真实帧率、真实带宽、Pi 占用 —— 决定后面是否降分辨率</p>
+      </div>
+    </div>
+    <div class="phase">
+      <div class="pnum todo">2</div>
+      <div class="pbody">
+        <h4>推理跑通</h4>
+        <p class="goal">ONNX Runtime + yolov8n，先用本地 imshow 出框，只关心推理耗时与检测结果是否正确</p>
+        <p class="out">产出：单帧推理 ms、实际可达 fps</p>
+      </div>
+    </div>
+    <div class="phase">
+      <div class="pnum todo">3</div>
+      <div class="pbody">
+        <h4>Web 界面</h4>
+        <p class="goal">FastAPI 起 WebSocket，单页 HTML 用双层 canvas 显示画面与检测框，帧与框同包下发</p>
+        <p class="out">产出：浏览器里能看、能远程访问、带 FPS 与延迟读数</p>
+      </div>
+    </div>
+    <div class="phase">
+      <div class="pnum todo">4</div>
+      <div class="pbody">
+        <h4>优化（可选）</h4>
+        <p class="goal">零转码节点、JPEG 质量调参、跳帧策略、检测参数面板</p>
+        <p class="out">产出：端到端压到 100 ms 附近</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>两个还没定的事</h2>
+  <div class="card">
+    <h3 style="margin-top:0">1. 检测目标是什么</h3>
+    <p style="margin-top:6px">现在按 COCO 80 类做（<code class="inline">person</code>、<code class="inline">bottle</code>、<code class="inline">cell phone</code> 之类开箱即用）。如果要检测特定物体（比如某个零件、某种手势），就得自己标注 + 训练，那是另一个工程量级，架构不变但周期从一天变成一周。</p>
+    <h3>2. 延迟目标是什么量级</h3>
+    <p style="margin-top:6px">「看着画面做判断」120~160 ms 完全够；「手眼协调地遥控」就得压到 80 ms 以内，那要换 WebRTC 或把推理搬到 Pi 加加速棒。这两个目标对应两套不同的优化路线，越早定越省事。</p>
+  </div>
+</section>
+
+<footer>
+  本文档基于 2026-11-21 ~ 11-23 的讨论整理，参数以硬件实测为准。<br>
+  配套文档：<code class="inline">ubuntu24-ros2-搭建清单.html</code>（环境落地步骤）、<code class="inline">net_setup/</code>（网络配置细节）。
+</footer>
+
+</div>
+</body>
+</html>

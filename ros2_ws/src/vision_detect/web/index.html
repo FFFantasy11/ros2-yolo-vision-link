@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YOLO 实时检测</title>
+<style>
+  :root {
+    --bg: #0a0e13;
+    --panel: #121a23;
+    --line: #223040;
+    --text: #e6edf3;
+    --dim: #8b9bad;
+    --ok: #3ddc84;
+    --bad: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif;
+  }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .app {
+    width: 100%; max-width: 1040px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 18px 50px rgba(0,0,0,.55);
+  }
+
+  /* 顶部状态条 */
+  .bar {
+    display: flex; align-items: center; gap: 18px;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--line);
+    font-variant-numeric: tabular-nums;
+    flex-wrap: wrap;
+  }
+  .brand { font-weight: 600; letter-spacing: .3px; margin-right: auto; }
+  .brand small { color: var(--dim); font-weight: 400; margin-left: 8px; }
+  .stat { color: var(--dim); font-size: 13px; white-space: nowrap; }
+  .stat b { color: var(--text); font-weight: 600; }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--bad); display: inline-block; margin-right: 6px;
+    box-shadow: 0 0 0 0 rgba(255,92,92,.6);
+  }
+  .dot.on { background: var(--ok); box-shadow: 0 0 8px rgba(61,220,132,.8); }
+
+  /* 画面区 */
+  .stage {
+    position: relative; background: #000;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 300px;
+  }
+  canvas { display: block; width: 100%; height: auto; }
+
+  .placeholder {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 8px; color: var(--dim); font-size: 13px;
+    pointer-events: none;
+  }
+  .placeholder.hide { display: none; }
+  .spinner {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 2px solid var(--line); border-top-color: #4cc2ff;
+    animation: spin .9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 右下角目标列表 */
+  .objs {
+    position: absolute; right: 10px; bottom: 10px;
+    display: flex; flex-direction: column; gap: 4px;
+    max-width: 46%;
+  }
+  .obj {
+    display: flex; align-items: center; gap: 7px;
+    padding: 3px 9px 3px 7px;
+    background: rgba(10,14,19,.78);
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 7px;
+    font-size: 12px; font-variant-numeric: tabular-nums;
+    backdrop-filter: blur(6px);
+  }
+  .obj i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .obj span { color: var(--dim); }
+
+  @media (max-width: 560px) {
+    .stat:nth-of-type(n+4) { display: none; }
+    .brand small { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="bar">
+    <div class="brand">YOLO 实时检测 <small>yolov8n · COCO 80</small></div>
+    <div class="stat"><span class="dot" id="dot"></span><span id="conn">连接中</span></div>
+    <div class="stat">渲染 <b id="fps">—</b> fps</div>
+    <div class="stat">推理 <b id="infer">—</b> ms</div>
+    <div class="stat">延迟 <b id="lat">—</b> ms</div>
+    <div class="stat">目标 <b id="nobj">—</b></div>
+  </div>
+
+  <div class="stage">
+    <canvas id="cv" width="640" height="480"></canvas>
+    <div class="placeholder" id="ph">
+      <div class="spinner"></div>
+      <div>等待视频流…</div>
+    </div>
+    <div class="objs" id="objs"></div>
+  </div>
+</div>
+
+<script>
+const cv   = document.getElementById('cv');
+const ctx  = cv.getContext('2d', { alpha: false });
+const dot  = document.getElementById('dot');
+const conn = document.getElementById('conn');
+const elFps = document.getElementById('fps');
+const elInf = document.getElementById('infer');
+const elLat = document.getElementById('lat');
+const elN   = document.getElementById('nobj');
+const elObjs= document.getElementById('objs');
+const ph    = document.getElementById('ph');
+
+// 每个类别固定一个色相，同一物体在每一帧颜色一致
+const colorOf = (id) => `hsl(${(id * 47) % 360} 88% 60%)`;
+
+let decoding = false;      // 防重入：解码没完成时丢掉新帧，避免排队堆积
+let lastVer  = -1;
+
+function drawBox(d) {
+  const c = colorOf(d.cls);
+  const x = d.x1, y = d.y1, w = d.x2 - d.x1, h = d.y2 - d.y1;
+  if (w < 2 || h < 2) return;
+
+  // 半透明填充 + 实线边框，看得清又不遮住物体
+  ctx.fillStyle = c.replace(')', ' / .10)').replace('hsl', 'hsla');
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = c;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+
+  // 标签：类别 + 置信度，贴在框的上方（顶到边就画在框内）
+  const label = `${d.name} ${d.conf.toFixed(2)}`;
+  ctx.font = '600 13px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+  const tw = ctx.measureText(label).width;
+  const lh = 19;
+  const ly = y - lh - 2 >= 0 ? y - lh - 2 : y + 2;
+
+  ctx.fillStyle = c;
+  ctx.fillRect(x, ly, tw + 12, lh);
+  ctx.fillStyle = '#08131a';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x + 6, ly + lh / 2 + .5);
+}
+
+function render(bmp, m) {
+  if (cv.width !== m.w || cv.height !== m.h) {
+    cv.width = m.w; cv.height = m.h;
+  }
+  ctx.drawImage(bmp, 0, 0);
+  for (const d of m.dets) drawBox(d);
+
+  elFps.textContent = m.fps.toFixed(1);
+  elInf.textContent = m.infer_ms.toFixed(1);
+  elLat.textContent = m.lat_ms.toFixed(1);
+  elN.textContent   = m.dets.length;
+
+  // 目标列表按面积从大到小，最多 6 条
+  const top = [...m.dets]
+    .sort((a, b) => (b.x2 - b.x1) * (b.y2 - b.y1) - (a.x2 - a.x1) * (a.y2 - a.y1))
+    .slice(0, 6);
+  elObjs.innerHTML = top.map(d =>
+    `<div class="obj"><i style="background:${colorOf(d.cls)}"></i>${d.name}<span>${d.conf.toFixed(2)}</span></div>`
+  ).join('');
+}
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen = () => {
+    dot.classList.add('on');
+    conn.textContent = '已连接';
+  };
+
+  ws.onclose = () => {
+    dot.classList.remove('on');
+    conn.textContent = '已断开，重连中…';
+    setTimeout(connect, 1500);
+  };
+
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = async (ev) => {
+    if (decoding) return;          // 上一帧还在解码就丢掉这一帧，宁丢不排队
+    decoding = true;
+    try {
+      const total = ev.data.byteLength;
+      const hlen  = new DataView(ev.data).getUint32(0, true);
+      const meta  = JSON.parse(new TextDecoder().decode(new Uint8Array(ev.data, 4, hlen)));
+      const blob  = new Blob([new Uint8Array(ev.data, 4 + hlen, total - 4 - hlen)], { type: 'image/jpeg' });
+      const bmp   = await createImageBitmap(blob);
+      render(bmp, meta);
+      bmp.close();
+      ph.classList.add('hide');
+    } catch (e) {
+      console.warn('帧解析失败', e);
+    } finally {
+      decoding = false;
+    }
+  };
+}
+
+connect();
+</script>
+</body>
+</html>

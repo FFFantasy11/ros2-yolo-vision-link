@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Fast DDS 配置：树莓派端版本（白名单 = 192.168.10.2，Pi 有线口）
+
+  与 wire-host.xml 只差一个 address。两端必须各自填自己有线口的 IP，
+  否则 DDS 会挑错网卡，表现为"能 ping 通但收不到画面"。
+
+  部署位置：~/vision_project/config/wire.xml（由 scripts/deploy.sh 按机器挑选）
+  使用方式：export FASTRTPS_DEFAULT_PROFILES_FILE=~/vision_project/config/wire.xml
+-->
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <profiles>
+    <transport_descriptors>
+      <transport_descriptor>
+        <transport_id>shm_local</transport_id>
+        <type>SHM</type>
+      </transport_descriptor>
+      <transport_descriptor>
+        <transport_id>udp_wire</transport_id>
+        <type>UDPv4</type>
+        <interfaceWhiteList>
+          <address>192.168.10.2</address>
+        </interfaceWhiteList>
+      </transport_descriptor>
+    </transport_descriptors>
+    <participant profile_name="wire_only" is_default_profile="true">
+      <rtps>
+        <userTransports>
+          <transport_id>shm_local</transport_id>
+          <transport_id>udp_wire</transport_id>
+        </userTransports>
+        <useBuiltinTransports>false</useBuiltinTransports>
+      </rtps>
+    </participant>
+  </profiles>
+</dds>

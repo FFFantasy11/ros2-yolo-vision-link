@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>vision_detect</name>
+  <version>1.0.0</version>
+  <description>
+    主机端检测节点（Python）：订阅 CompressedImage，用 ultralytics YOLOv8 推理，
+    通过内置 HTTP + WebSocket 服务把原图与检测框实时推给浏览器。
+    推理栈依赖 PyTorch，无法在 C++ 里等价替换（见 docs/设计说明），故本节点保留 Python。
+  </description>
+  <maintainer email="FFFantasy11@users.noreply.github.com">FFFantasy11</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <!-- ultralytics / torch / fastapi / uvicorn 通过 venv 提供，rosdep 无对应 key -->
+  <exec_depend>python3-fastapi</exec_depend>
+  <exec_depend>python3-uvicorn</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

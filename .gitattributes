@@ -1,0 +1,13 @@
+# 跨平台协作：仓库内统一 LF，避免在 Windows 上编辑后脚本出现 $'\r': command not found
+* text=auto eol=lf
+
+# 脚本强制 LF（CRLF 会让 shebang 失效、让 bash 报 $'\r' 错误）
+*.sh    text eol=lf
+*.py    text eol=lf
+*.in    text eol=lf
+
+# 二进制资源不做换行转换
+*.pt    binary
+*.onnx  binary
+*.png   binary
+*.jpg   binary

@@ -1,0 +1,18 @@
+# 树莓派端采集参数。与 cam_node 的 declare_parameter 默认值一致，
+# 改这里即可，不需要重新编译。
+vision_cam:
+  ros__parameters:
+    device: /dev/video0
+    topic: /image_raw/compressed
+    width: 640
+    height: 480
+    fps: 20.0
+    fourcc: YUYV          # 这个模组 MJPG 上限 10fps，YUYV 才能 20fps
+    quality: 80
+    frame_id: camera_optical_frame
+    buffers: 4            # 必须 >1，1 会让帧率减半
+    print_every: 40
+    lock_controls: true
+    exposure: 100         # 单位 100µs，100 = 10ms；开灯后可降到 30
+    gain: 63
+    brightness: 0

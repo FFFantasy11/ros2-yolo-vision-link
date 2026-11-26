@@ -1,0 +1,30 @@
+[Unit]
+# 树莓派端采集节点：用户级 systemd 服务
+# @HOME@ 由 scripts/pi/install_service.sh 在安装时替换成实际家目录
+Description=vision_cam - 树莓派 USB 摄像头采集节点（V4L2 -> CompressedImage）
+Documentation=file://@HOME@/vision_project/README.md
+# 摄像头是本地设备，但 DDS 需要有线口 up，所以等网络就绪
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@HOME@/vision_project/ros2_ws
+# 强制 DDS 走有线口：不设这个，视频流会跑到 WiFi 上，帧间隔 p99 从 52ms 恶化到 210ms
+Environment=FASTRTPS_DEFAULT_PROFILES_FILE=@HOME@/vision_project/config/wire.xml
+Environment=ROS_DOMAIN_ID=0
+# 通过 bash 载入 ROS 环境；exec 让 cam_node 成为主进程，systemd 才能真正管住它
+# （若写成 source ... && cam_node，杀服务时 cam_node 会变成孤儿并占住摄像头）
+ExecStart=/bin/bash -c 'source /opt/ros/jazzy/setup.bash && source @HOME@/vision_project/ros2_ws/install/setup.bash && exec @HOME@/vision_project/ros2_ws/install/vision_cam/lib/vision_cam/cam_node --ros-args --params-file @HOME@/vision_project/ros2_ws/install/vision_cam/share/vision_cam/config/cam.yaml'
+
+# 摄像头偶尔枚举慢，失败就重试；60 秒内超过 5 次则停下，避免把日志刷爆
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

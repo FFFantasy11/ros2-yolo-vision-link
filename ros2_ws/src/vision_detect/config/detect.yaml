@@ -1,0 +1,16 @@
+# 主机端检测节点参数。改这里即可，不用重新编译。
+#
+# 注意：本节点依赖 ultralytics/torch，必须用 ~/venv/bin/python3 运行
+#       （scripts/host/start_detect.sh 已封装好这一点）。
+vision_detect:
+  ros__parameters:
+    topic: /image_raw/compressed     # Pi 端发布的话题，两端必须一致
+    model: ~/yolov8n.pt              # ultralytics 权重，启动时按 ~ 展开
+    imgsz: 640
+    conf: 0.4
+    iou: 0.7                         # 与 ultralytics 默认一致
+    classes: []                      # 空 = 全部 80 类；只检测人写 [0]
+    quality: 80                      # 推给浏览器的 JPEG 质量
+    threads: 8                       # torch 线程数，按物理核给
+    port: 8000
+    bind: 0.0.0.0

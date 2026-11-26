@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>从零到成品 · 树莓派视觉检测链路执行路线</title>
+<style>
+:root{
+  --bg:#f6f5f2; --panel:#ffffff; --ink:#1b1f23; --ink-soft:#39424a;
+  --muted:#6b757d; --line:#e4e2dc; --accent:#1d5b8a; --accent-soft:#e9f1f7;
+  --warn:#a8334a; --warn-soft:#f9ebee; --ok:#2c7350; --ok-soft:#e6f2ec;
+  --code-bg:#1b1f23; --code-ink:#e8e6e1; --radius:12px;
+}
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:880px; margin:0 auto; padding:0 22px;}
+
+.hero{padding:42px 0 24px; border-bottom:1px solid var(--line);}
+.eyebrow{margin:0 0 12px; font-size:12px; letter-spacing:.16em; color:var(--accent); font-weight:600;}
+.hero h1{margin:0 0 10px; font-size:26px; line-height:1.35; font-weight:700; letter-spacing:-.01em;}
+.hero p{margin:0; color:var(--muted); font-size:14px;}
+.meta{margin-top:18px; display:flex; flex-wrap:wrap; gap:8px;}
+.chip{font-size:12px; padding:3px 10px; border-radius:20px; background:var(--panel); border:1px solid var(--line); color:var(--ink-soft);}
+
+.progress-bar{
+  position:sticky; top:0; z-index:10; background:rgba(246,245,242,.94);
+  backdrop-filter:blur(6px); border-bottom:1px solid var(--line);
+  padding:11px 0; margin-bottom:24px;
+}
+.progress-inner{max-width:880px; margin:0 auto; padding:0 22px; display:flex; align-items:center; gap:14px;}
+.track{flex:1; height:6px; background:#e4e2dc; border-radius:3px; overflow:hidden;}
+.fill{height:100%; width:0%; background:var(--accent); border-radius:3px; transition:width .25s ease;}
+.count{font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap;}
+
+.notice{
+  background:var(--ok-soft); border:1px solid #c3e0d2; border-radius:var(--radius);
+  padding:16px 20px; margin:18px 0 6px; font-size:14px; color:var(--ink-soft);
+}
+.notice b{color:var(--ok); display:block; margin-bottom:4px; font-size:14.5px;}
+
+.stage{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:20px 24px 22px; margin-bottom:18px;
+}
+.stage-head{display:flex; align-items:baseline; gap:12px; margin-bottom:2px;}
+.num{
+  font-size:12px; font-weight:600; color:#fff; background:var(--accent);
+  width:24px; height:24px; border-radius:7px; display:inline-flex;
+  align-items:center; justify-content:center; flex:none;
+}
+.num.dim{background:#cfcbc3;}
+.stage h2{margin:0; font-size:17px; font-weight:600; letter-spacing:-.01em;}
+.stage-sub{margin:2px 0 4px 36px; font-size:13px; color:var(--muted);}
+.when{display:inline-block; font-size:11.5px; padding:2px 9px; border-radius:20px; margin-left:36px; margin-bottom:14px;
+  background:var(--accent-soft); color:var(--accent); border:1px solid #c9dceb;}
+.when.now{background:var(--ok-soft); color:var(--ok); border-color:#c3e0d2;}
+
+.step{display:flex; gap:11px; padding:12px 0; border-top:1px solid #f0eee9;}
+.step:first-of-type{border-top:none;}
+.step input[type=checkbox]{margin:5px 0 0; width:16px; height:16px; accent-color:var(--accent); flex:none; cursor:pointer;}
+.step-body{flex:1; min-width:0;}
+.step-title{font-size:14.5px; color:var(--ink); font-weight:500;}
+.step-note{font-size:13.5px; color:var(--ink-soft); margin-top:3px;}
+.step.done .step-title{color:var(--muted); text-decoration:line-through; text-decoration-color:#c9c6be;}
+
+.code{position:relative; margin:9px 0 2px;}
+.code pre{
+  margin:0; background:var(--code-bg); color:var(--code-ink);
+  padding:13px 15px; border-radius:8px; overflow-x:auto;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12.5px; line-height:1.7;
+}
+.code pre::-webkit-scrollbar{height:8px;}
+.code pre::-webkit-scrollbar-thumb{background:#3a3f45; border-radius:4px;}
+.copy{
+  position:absolute; top:7px; right:8px; font-size:11px; padding:2px 8px;
+  background:rgba(255,255,255,.1); color:#c8c6c0; border:1px solid rgba(255,255,255,.15);
+  border-radius:5px; cursor:pointer; font-family:inherit;
+}
+.copy:hover{background:rgba(255,255,255,.18); color:#fff;}
+code.inline{background:#f2f0ea; padding:1px 5px; border-radius:4px;
+  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; color:#4a3f35;}
+
+.expect{
+  margin:8px 0 2px; padding:9px 13px; background:var(--ok-soft);
+  border-left:3px solid var(--ok); border-radius:0 7px 7px 0;
+  font-size:13px; color:var(--ink-soft);
+}
+.expect b{color:var(--ok);}
+.trap{
+  margin:8px 0 2px; padding:9px 13px; background:var(--warn-soft);
+  border-left:3px solid var(--warn); border-radius:0 7px 7px 0;
+  font-size:13px; color:var(--ink-soft);
+}
+.trap b{color:var(--warn);}
+
+.gate{
+  margin:16px 0 0; padding:14px 18px; border:1px dashed #b9d3e4;
+  background:#f4f9fc; border-radius:10px;
+}
+.gate .lbl{
+  display:inline-block; font-size:11px; letter-spacing:.1em; color:#fff;
+  background:var(--accent); padding:2px 8px; border-radius:4px; margin-bottom:7px;
+}
+.gate p{margin:0; font-size:13.5px; color:var(--ink-soft);}
+.gate ul{margin:6px 0 0; padding-left:20px; font-size:13px; color:var(--ink-soft);}
+
+h3{font-size:14.5px; margin:20px 0 6px; font-weight:600;}
+
+.table-wrap{overflow-x:auto; margin:12px 0;}
+table{border-collapse:collapse; width:100%; font-size:13.5px; background:var(--panel);}
+th,td{padding:9px 11px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top;}
+th{font-weight:600; color:var(--ink-soft); background:#faf9f6; font-size:12.5px; white-space:nowrap;}
+tbody tr:last-child td{border-bottom:none;}
+td.mono{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; color:#4a3f35;}
+
+footer{padding:24px 0 48px; border-top:1px solid var(--line); margin-top:20px; color:var(--muted); font-size:12.5px;}
+
+@media (max-width:640px){
+  .hero h1{font-size:21px;}
+  .stage{padding:16px 16px 18px;}
+  .stage-sub,.when{margin-left:0;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div style="margin:0 0 18px;padding:12px 16px;border-left:4px solid #c0891f;background:#fdf6e6;color:#4a3a12;border-radius:8px;font-size:14px;line-height:1.7;">
+  <b>2026-11-26 更新：</b>本页记录的是 <b>Python 版本</b> 的推进过程。当前实现已重构为标准 ROS 2 工作空间（<code>ros2_ws/src</code>）：采集端与链路探针改为 <b>C++</b>，推理节点因 PyTorch 依赖保留 <b>Python</b>。最新目录结构、部署与启动方式见 <a href="../README.md" style="color:#1d5b8a;">README.md</a>，取舍依据见 <a href="设计说明.md" style="color:#1d5b8a;">设计说明.md</a>。
+</div>
+
+<div class="hero">
+  <p class="eyebrow">执行路线 · 从零到成品</p>
+  <h1>树莓派摄像头 → ROS2 → 主机 YOLO → 网页显示</h1>
+  <p>按你现在的真实进度重排：树莓派已装 ROS2，主机未重装，摄像头未接树莓派。每一步都有"应该看到什么"。</p>
+  <div class="meta">
+    <span class="chip">6 个阶段</span>
+    <span class="chip">阶段 1 已完成</span>
+    <span class="chip">不需要主机也能开始</span>
+    <span class="chip">COCO 80 类</span>
+  </div>
+</div>
+
+<div class="progress-bar">
+  <div class="progress-inner">
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <div class="count" id="count">0 / 0</div>
+  </div>
+</div>
+
+<div class="notice">
+  <b>先看这一条，它决定了你今晚能做什么。</b>
+  原来的计划把"树莓派采集"和"主机装系统"混在一起做，但你这两件事没有依赖关系。<b style="display:inline">阶段 1 完全在树莓派上完成，不需要主机存在。</b>这一阶段已经实测跑通，得到 <b style="display:inline">640×480 @ 20fps、60 KB/帧、1.26 MB/s</b> 三个确定数字；主机什么时候装好，接着做阶段 2 就行。
+</div>
+
+<div class="stage">
+  <div class="stage-head"><span class="num">1</span><h2>树莓派把摄像头跑起来</h2></div>
+  <p class="stage-sub">目标：在没有任何主机参与的情况下，让 <code class="inline">/image_raw/compressed</code> 稳定输出 640×480 @ 20fps。<b>已实测跑通</b>，下面是最终确认过的命令和真实数字。</p>
+  <span class="when now">现在就能做 · 约 40 分钟</span>
+
+  <div class="step">
+    <input type="checkbox">
+    <div class="step-body">
+      <div class="step-title">确认 ROS2 装好了、版本对不对</div>
+      <div class="step-note">开一个终端跑。如果输出空白，说明这个终端没加载 ROS2 环境。</div>
+      <div class="code"><button class="copy">复制</button><pre>echo $ROS_DISTRO</pre></div>
+      <div class="expect"><b>应该看到：</b><code class="inline">jazzy</code>。如果是空白，先跑 <code class="inline">source /opt/ros/jazzy/setup.bash</code> 再试一次。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox">
+    <div class="step-body">
+      <div class="step-title">让每个新终端自动加载 ROS2</div>
+      <div class="step-note">不做这一步，你每开一个终端都要手动 source 一次，后面开三四个终端会漏。</div>
+      <div class="code"><button class="copy">复制</button><pre>echo 'source /opt/ros/jazzy/setup.bash' &gt;&gt; ~/.bashrc
+source ~/.bashrc</pre></div>
+      <div class="expect"><b>验证：</b>关掉终端重新打开，再跑 <code class="inline">echo $ROS_DISTRO</code>，有输出就成功了。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox">
+    <div class="step-body">
+      <div class="step-title">装摄像头相关的三个包</div>
+      <div class="step-note"><code class="inline">v4l-utils</code> 提供 <code class="inline">v4l2-ctl</code> 命令；另外两个提供采集节点和 JPEG 压缩插件。</div>
+      <div class="code"><button class="copy">复制</button><pre>sudo apt update
+sudo apt install -y v4l-utils ros-jazzy-v4l2-camera ros-jazzy-image-transport-plugins</pre></div>
+      <div class="trap"><b>坑：</b>如果提示找不到 <code class="inline">ros-jazzy-image-transport-plugins</code>，先确认你加过 ROS2 的 apt 源（装 ROS2 时做过）。也可以单独装 <code class="inline">ros-jazzy-compressed-image-transport</code>。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox">
+    <div class="step-body">
+      <div class="step-title">把摄像头插到树莓派上，确认系统认到了</div>
+      <div class="step-note">优先插蓝色的 USB 3.0 口。插好后立刻跑下面这条。</div>
+      <div class="code"><button class="copy">复制</button><pre>ls /dev/video*</pre></div>
+      <div class="expect"><b>应该看到：</b><code class="inline">/dev/video0</code>，可能还有 <code class="inline">/dev/video1</code>（那是伴生的元数据节点，不用管）。</div>
+      <div class="trap"><b>什么都没有：</b>换一个 USB 口，线材换短的，别用 USB 延长线或 Hub。还不行就 <code class="inline">dmesg | tail -20</code> 看插上瞬间有没有报错。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox">
+    <div class="step-body">
+      <div class="step-title">确认设备名，别认错节点</div>
+      <div class="step-note">装了两个以上摄像头设备时，<code class="inline">video0</code> 不一定是你的那个。</div>
+      <div class="code"><button class="copy">复制</button><pre>v4l2-ctl --list-devices</pre></div>
+      <div class="expect"><b>应该看到：</b>一个带摄像头型号名的条目，下面跟着 <code class="inline">/dev/video0</code>。记住这个名字，下面用的就是它。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">确认格式与设备节点（已完成）</div>
+      <div class="step-note">实测结果：设备是 <code class="inline">bbdf:0537 camera</code>，采集节点 <code class="inline">/dev/video0</code>（sysfs 名字 <code class="inline">camera: camera</code>），<code class="inline">/dev/video1</code> 是伴生 metadata 节点。板载 video19~37（<code class="inline">rpivid</code> / <code class="inline">pispbe</code>）全是 ISP 和解码器，跟 USB 摄像头无关，永远不要动。</div>
+      <div class="code"><button class="copy">复制</button><pre>v4l2-ctl --list-formats-ext -d /dev/video0</pre></div>
+      <div class="expect"><b>实测：</b>MJPG 覆盖 1600×1200 / 1280×1024 / 1280×720 / 800×600 / 640×480；YUYV 在同分辨率下只有 5~30fps，其中 <b>720p 仅 10fps，640×480 才 30fps</b>。</div>
+      <div class="trap"><b>MJPG 标着 30fps，实际跑不到 20fps 以上，所以最后没用它。</b>两个 ROS2 驱动都不行：<code class="inline">v4l2_camera</code> 没有 MJPG 解码路径，直接 <code class="inline">cv_bridge</code> 抛异常 abort；<code class="inline">usb_cam</code> 的 <code class="inline">raw_mjpeg</code> 会 Segmentation fault。最终走 YUYV 640×480。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox">
+    <div class="step-body">
+      <div class="step-title">检查供电有没有欠压（这一步能省掉你后面两小时的怀疑）</div>
+      <div class="step-note">树莓派 5 用非官方电源时会把 USB 口限流到 600mA，摄像头供电不足会反复重连、掉帧，而且报错很不直观。</div>
+      <div class="code"><button class="copy">复制</button><pre>vcgencmd get_throttled</pre></div>
+      <div class="expect"><b>必须是：</b><code class="inline">throttled=0x0</code>。出现 <code class="inline">0x50000</code> 或 <code class="inline">0x50005</code> 说明曾经欠压或降频。</div>
+      <div class="trap"><b>不是 0x0：</b>换官方 27W（5V/5A）电源再继续。用普通 5V/3A 充电头，后面帧率上不去你永远查不到原因。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">起采集节点（终端 A，最终采用的命令）</div>
+      <div class="step-note">驱动用 <code class="inline">usb_cam</code>（<code class="inline">sudo apt install -y ros-jazzy-usb-cam</code>），格式用 <code class="inline">yuyv</code>，分辨率 <b>640×480</b>。<code class="inline">brightness:=0</code> 是因为 usb_cam 启动时会按自己的默认值把亮度改成 50。</div>
+      <div class="code"><button class="copy">复制</button><pre>ros2 run usb_cam usb_cam_node_exe --ros-args \
+  -p video_device:=/dev/video0 \
+  -p image_width:=640 -p image_height:=480 \
+  -p framerate:=30.0 -p pixel_format:=yuyv \
+  -p io_method:=mmap -p brightness:=0</pre></div>
+      <div class="expect"><b>应该看到：</b><code class="inline">Starting 'default_cam' (/dev/video0) at 640x480 via mmap (yuyv) at 30 FPS</code>，然后停住不退出。</div>
+      <div class="trap"><b>标定文件 <code class="inline">Unable to open camera calibration file</code> 是正常的</b>，你没标定过，不影响出图。<br><b>别传 by-id 路径</b>（<code class="inline">/dev/v4l/by-id/...</code>），usb_cam 会拼成 <code class="inline">/dev/../../video0</code> 然后报 not a valid device。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">另开终端 B，测帧率</div>
+      <div class="step-note">这个数字是第一个关键验收点。</div>
+      <div class="code"><button class="copy">复制</button><pre>ros2 topic hz /image_raw</pre></div>
+      <div class="expect"><b>实测：</b><code class="inline">average rate: 19.87</code>，帧间隔 min 0.048s / max 0.052s，<b>std dev 0.002s</b>。20fps 是这颗模组在 YUYV 下的物理上限，已经排查过曝光、供电、USB 速率、带宽四项，都不足解释。</div>
+      <div class="trap"><b>为什么 20fps 反而是好事：</b>实测单帧推理只有 <b>17.7ms</b>（yolov8n、8 线程、640 输入），20fps 的 50ms 帧间隔里只占三分之一，余量很大，不需要任何跳帧策略。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">终端 C：把图压成 JPEG</div>
+      <div class="step-note">这条命令会一直占着终端，所以要用第三个终端。<code class="inline">-r out:=/image_raw</code> 会让压缩后的话题自动变成 <code class="inline">/image_raw/compressed</code>。640×480 的原始帧是 0.92 MB，20fps 就是 18.4 MB/s，必须压完才能跨机。</div>
+      <div class="code"><button class="copy">复制</button><pre>ros2 run image_transport republish raw compressed --ros-args \
+  -p jpeg_quality:=80 \
+  -r in:=/image_raw \
+  -r out:=/image_raw</pre></div>
+      <div class="expect"><b>应该看到：</b>日志输出后停住不退出。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">终端 D：测压缩后的带宽</div>
+      <div class="step-note">这是第二个关键验收点，它决定了网络够不够用。</div>
+      <div class="code"><button class="copy">复制</button><pre>ros2 topic bw /image_raw/compressed</pre></div>
+      <div class="expect"><b>实测：</b><code class="inline">1.26 MB/s</code>，单帧 mean 0.06 MB（约 60 KB）。压缩比 15 倍，折合 <b>10 Mbps</b>。</div>
+      <div class="trap"><b>超过 3 MB/s：</b>JPEG 质量偏高，把 <code class="inline">jpeg_quality</code> 降到 70 重启 C。<br><b>大于 5 MB/s：</b>可能在传原始帧，检查话题名是不是 <code class="inline">/image_raw/compressed</code>。</div>
+    </div>
+  </div>
+
+  <div class="gate">
+    <span class="lbl">阶段 1 验收门 · 已通过</span>
+    <p>实测值（2026-11-24），后面所有调参都以这三个数为基准：</p>
+    <ul>
+      <li><code class="inline">ros2 topic hz /image_raw</code> → <b>19.87</b>（抖动 std 0.002s）</li>
+      <li><code class="inline">ros2 topic bw /image_raw/compressed</code> → <b>1.26 MB/s</b>，单帧 60 KB</li>
+      <li>负载 → 待补测：<code class="inline">top</code> 那次是在 Ctrl-C 之后跑的，读到的 0.0% CPU 不算数。进程活着时用 <code class="inline">top -p $(pgrep -d, -f usb_cam)</code> 看才是真实占用</li>
+    </ul>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="stage-head"><span class="num">2</span><h2>把主机重装成 Ubuntu 24.04</h2></div>
+  <p class="stage-sub">目标：一台干净的单系统 Ubuntu，装好 ROS2 和 Python 环境。</p>
+  <span class="when">需要 U 盘 · 约 2 小时（大部分在等安装）</span>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">先备份主机上的东西</div>
+      <div class="step-note">选"擦除整个磁盘"之后没有任何恢复手段。工作区里已有 <code class="inline">ubuntu2404/01-pre-wipe-backup.sh</code>，先看一眼再跑。</div>
+      <div class="trap"><b>确认：</b>这台机器上没有你还需要的文件。有就拷到 U 盘或网盘，别赌。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">下载镜像、做启动 U 盘</div>
+      <div class="step-note">在你这台 Windows 上做。镜像用 <b>Ubuntu 24.04.3 LTS Desktop</b>，写盘工具用 Rufus 或 balenaEtcher，8GB 以上 U 盘。</div>
+      <div class="expect"><b>注意：</b>一定要选 <b>Desktop</b> 版，不是 Server 版——你后面要在浏览器里看画面。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">进 BIOS 关掉 Secure Boot</div>
+      <div class="step-note">海尔这台机器开机按 Del 或 F2 进 BIOS。找到 Secure Boot 设为 Disabled，顺便把启动顺序改成 U 盘优先。</div>
+      <div class="step-note">不做这步，安装时可能进不去，或者装完核显驱动加载不上。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">安装：选"擦除磁盘并安装"+"最小安装"</div>
+      <div class="step-note">最小安装会跳过 LibreOffice 那一套，省几个 GB，也少一堆后台服务占内存。</div>
+      <div class="expect"><b>建议勾选：</b>"安装第三方软件"（显卡和媒体编解码固件）。AMD 核显虽然有开源驱动，勾了更省事。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">首启动：更新系统</div>
+      <div class="step-note">装完第一次开机，先更新一轮，避免后面装包时版本冲突。</div>
+      <div class="code"><button class="copy">复制</button><pre>sudo apt update &amp;&amp; sudo apt upgrade -y
+sudo apt install -y build-essential git curl vim net-tools</pre></div>
+      <div class="expect"><b>顺便验证核显正常：</b><code class="inline">lspci | grep -i vga</code> 应该能看到 <code class="inline">Radeon 780M</code>。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">装 ROS2 Jazzy（和树莓派同版本）</div>
+      <div class="step-note">你在树莓派上装过一次，流程一样。这里写全，避免你回头翻旧笔记。</div>
+      <div class="code"><button class="copy">复制</button><pre>sudo apt install -y software-properties-common curl
+sudo add-apt-repository universe -y
+# GitHub 取 key 在这台机器上会 TLS 中断，改用中科大镜像 + trusted=yes，跳过签名校验
+echo "deb [arch=$(dpkg --print-architecture) trusted=yes] https://mirrors.ustc.edu.cn/ros2/ubuntu noble main" \
+  | sudo tee /etc/apt/sources.list.d/ros2.list &gt; /dev/null
+sudo apt update
+sudo apt install -y ros-jazzy-desktop
+echo 'source /opt/ros/jazzy/setup.bash' &gt;&gt; ~/.bashrc</pre></div>
+      <div class="expect"><b>验证：</b>重新开一个终端，<code class="inline">ros2 topic list</code> 能输出 <code class="inline">/parameter_events</code> 和 <code class="inline">/rosout</code>。</div>
+      <div class="trap"><b>坑：</b>Ubuntu 24.04 的软件源文件是 <code class="inline">/etc/apt/sources.list.d/ubuntu.sources</code>（新格式），不是旧的 <code class="inline">sources.list</code>。网上很多换源教程改的是老文件，改完没效果。国内网络慢的话只改新格式那个文件。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">建 Python 虚拟环境（必须带 --system-site-packages）</div>
+      <div class="step-note">这条参数是关键：不加它，venv 里 <code class="inline">import rclpy</code> 会失败，但 <code class="inline">ros2 topic list</code> 一切正常，非常迷惑。</div>
+      <div class="code"><button class="copy">复制</button><pre>sudo apt install -y python3-venv python3-pip
+python3 -m venv --system-site-packages ~/venv
+echo 'source ~/venv/bin/activate' &gt;&gt; ~/.bashrc
+source ~/venv/bin/activate</pre></div>
+      <div class="expect"><b>应该看到：</b>命令行前面多了 <code class="inline">(venv)</code>。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">装 Python 包</div>
+      <div class="step-note">注意 torch 必须装 <b>CPU 版</b>。直接 <code class="inline">pip install torch</code> 会下载 2.5GB 的 CUDA 组件，而你没有 NVIDIA 显卡，装了也跑不起来。</div>
+      <div class="code"><button class="copy">复制</button><pre># 1) CPU 版 torch：必须用 curl 直下。pip 走同一条链路会被限速到 70 KB/s，curl 能到 10 MB/s
+curl -L -o ~/torch-2.15.0+cpu-cp312-cp312-manylinux_2_28_x86_64.whl \
+  "https://mirrors.aliyun.com/pytorch-wheels/cpu/torch-2.15.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl"
+curl -L -o ~/torchvision-0.29.1+cpu-cp312-cp312-manylinux_2_28_x86_64.whl \
+  "https://mirrors.aliyun.com/pytorch-wheels/cpu/torchvision-0.29.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl"
+pip install ~/torch-2.15.0+cpu-cp312-cp312-manylinux_2_28_x86_64.whl \
+            ~/torchvision-0.29.1+cpu-cp312-cp312-manylinux_2_28_x86_64.whl
+pip install "setuptools<80"     # pip 会顺手升到 84，colcon 要求 &lt;80
+# 2) 其余包体积小，直接 pip
+pip install ultralytics "numpy&lt;2" "opencv-python&lt;4.11" fastapi "uvicorn[standard]"</pre></div>
+      <div class="expect"><b>验证：</b><code class="inline">python -c "import rclpy, cv2, torch, ultralytics; print('ok')"</code> 输出 <code class="inline">ok</code>。</div>
+    </div>
+  </div>
+
+  <div class="gate">
+    <span class="lbl">阶段 2 验收门 · 已通过</span>
+    <p>2026-11-26 实测 <b>35 项全过、0 失败 0 警告</b>（运行 <code class="inline">bash ~/04-verify.sh</code>）。三条硬性检查：</p>
+    <ul>
+      <li><code class="inline">ros2 topic list</code> 有输出</li>
+      <li><code class="inline">which python3</code> 指向 <code class="inline">~/venv/bin/python3</code></li>
+      <li>venv 激活状态下 <code class="inline">python -c "import rclpy"</code> 不报错</li>
+      <li>venv 里 <code class="inline">import torch</code> 输出 <code class="inline">2.15.0+cpu</code></li>
+    </ul>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="stage-head"><span class="num">3</span><h2>网线直连，让两台机器互相看见</h2></div>
+  <p class="stage-sub">目标：主机能 ping 通树莓派，而且 ROS2 的话题能跨机收到。</p>
+  <span class="when">约 30 分钟</span>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">插网线</div>
+      <div class="step-note">树莓派的网口 ↔ 海尔的 RJ45 口。普通网线就行，两个口都支持自动翻转。主机的 WiFi 不用断，继续用来上网。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">主机设静态 IP：192.168.10.1</div>
+      <div class="step-note">图形界面最省事：设置 → 网络 → 有线 → 齿轮图标 → IPv4 → 手动 → 地址填 <code class="inline">192.168.10.1/24</code>，<b>网关和 DNS 全部留空</b> → 应用。</div>
+      <div class="trap"><b>网关一定要留空。</b>填了网关，主机的默认路由就跑到这条断网的线上，你会发现自己上不了网，而且是"能 ping 通树莓派但打不开网页"这种很诡异的现象。</div>
+      <div class="trap"><b>图形界面可能把 /24 存成 /0（实测踩到）。</b>现象是网口拿到 <code class="inline">169.254.x.x</code> 而不是 192.168.10.1，NetworkManager 认为地址无效直接退回 link-local。这时别在界面上反复改，直接用命令覆盖（连接名用 <code class="inline">nmcli -t -f NAME,UUID connection show</code> 查真实 UUID，注意它和 netplan 文件名里那串 UUID 不是一回事）：<br>
+      <code class="inline">sudo nmcli connection modify &lt;UUID&gt; ipv4.method manual ipv4.addresses 192.168.10.1/24 ipv4.gateway "" ipv4.dns ""</code><br>
+      <code class="inline">sudo nmcli connection up &lt;UUID&gt;</code></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">树莓派设静态 IP：192.168.10.2</div>
+      <div class="step-note">注意：Ubuntu 版树莓派<strong>没有 nmcli</strong>，网络由 cloud-init 生成 netplan、再交给 systemd-networkd 管理。直接改 netplan 文件，同时禁用 cloud-init 覆盖，否则重启会被改回去。</div>
+      <div class="code"><button class="copy">复制</button><pre>sudo cp -a /etc/netplan/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml.bak
+sudo tee /etc/netplan/50-cloud-init.yaml &gt; /dev/null &lt;&lt;"EOF"
+network:
+  version: 2
+  ethernets:
+    eth0:
+      optional: true
+      dhcp4: false
+      dhcp6: false
+      addresses:
+        - 192.168.10.2/24
+  wifis:
+    wlan0:
+      optional: true
+      dhcp4: true
+      regulatory-domain: "CN"
+      access-points:
+        "你的热点名":
+          auth:
+            key-management: "psk"
+            password: "你的热点密码"
+EOF
+# 关键：禁掉 cloud-init 的网络接管，否则重启后配置被覆盖
+printf "network: {config: disabled}\n" | sudo tee /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+sudo chmod 600 /etc/netplan/50-cloud-init.yaml
+sudo netplan generate &amp;&amp; sudo netplan apply</pre></div>
+      <div class="expect"><b>验证：</b><code class="inline">ip -br addr show eth0</code> 显示 <code class="inline">192.168.10.2/24</code>，且 <code class="inline">ip route</code> 的 <code class="inline">default</code> 仍然走 <code class="inline">wlan0</code>。</div>
+      <div class="trap"><b>WiFi 配置必须一起写进这个文件。</b>netplan 是整份替换，只写 eth0 会把原来的 wlan0 配置抹掉；而 <code class="inline">netplan apply</code> 过程中 wlan0 还会短暂 DOWN——如果只写了有线，树莓派就彻底失联，只能接显示器救。<br><b>wlan0 掉了怎么救：</b><code class="inline">sudo ip link set wlan0 up &amp;&amp; sudo systemctl restart systemd-networkd</code>，约 8 秒后回来。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">双向 ping 通</div>
+      <div class="step-note">两边各跑一次，都要通。</div>
+      <div class="code"><button class="copy">复制</button><pre>ping -c 3 192.168.10.2</pre></div>
+      <div class="expect"><b>应该看到：</b>3 个包全部收到，延迟小于 1ms。</div>
+      <div class="trap"><b>ping 不通：</b>先 <code class="inline">ip -br addr</code> 确认两边地址都设对了，再看网口的指示灯亮不亮。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">测 ROS2 能不能跨机发现（这是最容易失败的一步）</div>
+      <div class="step-note">树莓派上开一个终端发消息，主机上开一个终端收。</div>
+      <div class="code"><button class="copy">复制</button><pre># 树莓派
+ros2 topic pub /test std_msgs/String "data: hi" -r 1</pre></div>
+      <div class="code"><button class="copy">复制</button><pre># 主机
+ros2 topic echo /test</pre></div>
+      <div class="expect"><b>应该看到：</b>主机每秒刷一行 <code class="inline">data: hi</code>。</div>
+      <div class="trap"><b>收不到时，先别怀疑网络，按这四步走（实测两个假故障都出在这里）：</b><br>
+      ① <b>先 <code class="inline">ros2 daemon stop</code> 再重试。</b><code class="inline">ros2</code> 命令行有个常驻守护进程缓存计算图，链路换了、节点重启过，它可能一直在用旧图告诉你"没有这个 topic"。最快的排除法：<code class="inline">ros2 topic list --no-daemon</code>，能列出来就是 daemon 的锅；<br>
+      ② <b>发布端不要用 <code class="inline">timeout 20 ros2 topic pub ...</code> 在前台跑，然后再去订阅。</b>它是阻塞的，等你切到另一台机器敲 echo 时，发布端早就退出了。要把发布端放后台常驻：<code class="inline">nohup ros2 topic pub -r 2 /test std_msgs/String "{data: hi}" &gt; /tmp/pub.log 2&gt;&amp;1 &amp;</code>，看到日志里 <code class="inline">publishing #N</code> 再订阅；<br>
+      ③ 两端 <code class="inline">echo $ROS_DOMAIN_ID</code> 是否一致（默认都是空/0），<code class="inline">sudo ufw status</code> 排除防火墙；<br>
+      ④ 只有上面都排除了才动单播：两端都 <code class="inline">export ROS_STATIC_PEERS=192.168.10.1;192.168.10.2</code>。<b>直连网线下多播是通的，正常情况下不需要单播兜底。</b></div>
+    </div>
+  </div>
+
+  <div class="gate">
+    <div class="trap"><b>通过之后还有两件事必须做，否则阶段 4 的数字全是假的（实测踩到）：</b><br>
+    ① <b>对时。</b>两台机器各自连公网 NTP 时，误差可以到 ±150ms；直连 RTT 只有 0.25ms，所以让<b>主机当 NTP 服务器</b>、Pi 对着主机校时最准（实测偏差降到 85 µs）。主机：<code class="inline">apt install chrony</code>，配置加 <code class="inline">allow 192.168.10.0/24</code> 与 <code class="inline">local stratum 8</code>；Pi：<code class="inline">server 192.168.10.1 iburst prefer</code>。<br>
+    ② <b>强制 DDS 走有线口。</b>默认情况下 DDS 会自己挑接口，实测<b>视频流 100% 跑到了 WiFi 上</b>（有线口一个字节都没走）。用 Fast DDS profile 的 <code class="inline">interfaceWhiteList</code> 钉死：两端各写一份 <code class="inline">~/wire.xml</code>，同时保留 SHM 传输（只留 UDPv4 会让本机 614KB 的 raw 图走回环，延迟反而更差），然后 <code class="inline">export FASTRTPS_DEFAULT_PROFILES_FILE=$HOME/wire.xml</code>。</div>
+    <span class="lbl">阶段 3 验收门 · 已通过</span>
+    <p>2026-11-26 实测双向通过：主机收到 <code class="inline">data: wire-ok</code>，树莓派收到 <code class="inline">data: reverse-ok</code>，直连 RTT <b>0.25 ms</b>（min 0.176 / max 0.308），多播发现正常、未使用任何单播兜底。</p>
+    <p style="margin-top:6px; color:var(--warn)">这一步过不去，后面全部堵死。所以它必须单独测，不要和出流混在一起。</p>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="stage-head"><span class="num">4</span><h2>跨机器把视频流跑通并测量</h2></div>
+  <p class="stage-sub">目标：拿到真实的帧率、带宽、延迟三个数，它们决定后面所有参数。</p>
+  <span class="when">已完成 · 实测 19.9 fps / 6.1 Mbps / 延迟 p50 3.6 ms</span>
+
+  <div class="trap" style="margin:0 0 18px"><b>先说结论：阶段 1 的 usb_cam + republish 两级链路不能用，必须换。</b>
+  它的 <code class="inline">/image_raw</code> 发布端是 <b>RELIABLE + KEEP_LAST(100)</b>，单帧 614 KB 的 raw 图乘以 100 就是 <b>61 MB 历史</b>；
+  下游一旦跟不上，积压只增不减。实测端到端延迟从 <b>950 ms 一路涨到 1177 ms</b>，而且不会自己恢复。
+  Jazzy 的 usb_cam 没有暴露 publisher QoS 参数，改不了，所以换成一个单节点实现：
+  <b>V4L2 直接取流 → imencode JPEG → 发 CompressedImage，QoS = BEST_EFFORT + depth 1</b>。
+  换成它之后延迟变成 <b>3.6 ms</b>，降了 260 倍，同时 Pi 上少掉 12 MB/s 的本机 raw 转发、进程从 4 个降到 1 个。</div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">① 准备两样东西：出流节点 + 有线口配置</div>
+      <div class="step-note">工作区里 <code class="inline">vision/pi/cam_pub.py</code> 和 <code class="inline">vision/pi/start_cam_pub.sh</code> 直接拷到树莓派用户目录。另外需要阶段 3 那份 <code class="inline">~/wire.xml</code>（把 DDS 钉死在有线口，否则视频流会跑到 WiFi 上）。</div>
+      <div class="code"><button class="copy">复制</button><pre># 从 Windows 拷过去（在 Git Bash 里跑）
+scp vision/pi/cam_pub.py vision/pi/start_cam_pub.sh pi@192.168.10.2:~/
+
+# 树莓派上确认没有 CRLF 换行，否则报 $'\r': command not found
+sed -i "s/\r$//" ~/cam_pub.py ~/start_cam_pub.sh
+chmod +x ~/start_cam_pub.sh</pre></div>
+      <div class="expect"><b>依赖检查：</b>节点的 <code class="inline">cv2</code> 和 <code class="inline">rclpy</code> 都来自系统 Python（<b>不是</b> venv）。先 <code class="inline">source /opt/ros/jazzy/setup.bash</code> 再 <code class="inline">python3 -c "import cv2, rclpy"</code>，不报错就行。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">② 启动出流</div>
+      <div class="code"><button class="copy">复制</button><pre># 后台跑，日志留在 /tmp/campub.log
+nohup bash ~/start_cam_pub.sh &gt; /tmp/campub.log 2&gt;&amp;1 &amp;
+sleep 12; tail -5 /tmp/campub.log</pre></div>
+      <div class="expect"><b>应该看到：</b>第一行打印 <code class="inline">/dev/video0 YUYV 640x480 @20.0 → /image_raw/compressed (q80)</code>，之后每 40 帧一行实测帧率，稳定在 <b>19.6~19.9 fps</b>、每帧 <b>37~38 KB</b>。</div>
+      <div class="trap"><b>只有 10 fps：</b>两个原因，都实测踩过。① <b>MJPG 格式在这个模组上的上限就是 10 fps</b>，必须用 <code class="inline">--fourcc YUYV</code>；② <b><code class="inline">CAP_PROP_BUFFERSIZE</code> 设成 1 会让帧率刚好减半</b>（实测 1→10.1 fps、4→19.9 fps、8→19.9 fps），单缓冲下驱动必须等缓冲区回收才能再入队，每两帧才交出一帧。脚本里已经是 4。</div>
+      <div class="trap"><b>画面很暗：</b>节点默认把曝光锁在 10 ms（<code class="inline">--exposure 100</code>，单位 100 µs）。没开灯时这是正常的，画面暗不代表参数错。开灯后可以用 <code class="inline">--exposure 30</code>（3 ms）换取更短的采集时刻。注意<b>曝光必须在 open 之后设</b>——打开设备会把控件恢复成自动曝光，暗光下自动曝光会拉到 100 ms，帧率直接掉一半。脚本已经处理了顺序。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">③ 主机上确认话题与 QoS</div>
+      <div class="code"><button class="copy">复制</button><pre>source /opt/ros/jazzy/setup.bash
+ros2 daemon stop                       # 关键，见阶段 3
+export FASTRTPS_DEFAULT_PROFILES_FILE=$HOME/wire.xml
+ros2 topic list --no-daemon | grep image
+ros2 topic info /image_raw/compressed -v --no-daemon | head -20</pre></div>
+      <div class="expect"><b>应该看到：</b>只有 <code class="inline">/image_raw/compressed</code> 一个话题（raw 话题没了，这正是换方案的目的）；<code class="inline">info</code> 显示 <b>1 个 Publisher</b>，可靠性是 <b>BEST_EFFORT</b>，depth 为 <b>1</b>。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">④ 跑探针，拿完整报告</div>
+      <div class="step-note"><code class="inline">vision/host/probe.py</code> 用 BEST_EFFORT + depth 1 订阅，统计帧率、带宽、帧间隔分位、端到端延迟和卡顿次数。</div>
+      <div class="code"><button class="copy">复制</button><pre>export FASTRTPS_DEFAULT_PROFILES_FILE=$HOME/wire.xml
+~/venv/bin/python3 ~/probe.py --seconds 20</pre></div>
+      <div class="expect"><b>实测输出：</b>19.9 fps ｜ 6.1 Mbps ｜ 37.6 KB/帧 ｜ 帧间隔 p95 54.5 ms ｜ <b>端到端延迟 p50 3.6 ms</b> ｜ 卡顿 0。</div>
+      <div class="trap"><b>延迟显示几百毫秒：先查时钟，别怀疑链路。</b>两台机器各自连公网 NTP 时误差能到 ±150 ms。阶段 3 已经让主机当 NTP 服务器（Pi 偏差 85 µs），如果重装过系统要重做那一步。<b>帧率正常但延迟一路增长：</b>就是 RELIABLE 队列积压，返回确认是不是还在用 usb_cam。</div>
+    </div>
+  </div>
+
+  <div class="gate">
+    <span class="lbl">阶段 4 验收门 · 已通过</span>
+    <p>2026-11-26 实测：<b>19.9 fps ｜ 6.1 Mbps ｜ 37.6 KB/帧 ｜ 帧间隔 p50 50.1 / p95 54.5 ms ｜ 端到端延迟 p50 3.6~4.0 ms ｜ 卡顿 0 次</b>。</p>
+    <p style="margin-top:6px">对比旧方案：延迟 956 ms → 3.6 ms，带宽 6.0 Mbps → 6.1 Mbps（几乎不变，但单帧从 60 KB 降到 37.6 KB），卡顿都是 0。20 fps 的 50 ms 帧间隔里，链路只占 3.6 ms。</p>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="stage-head"><span class="num">5</span><h2>让 YOLO 出第一个框</h2></div>
+  <p class="stage-sub">目标：用 COCO 预训练模型在画面上画出检测框，并测出单帧推理耗时。</p>
+  <span class="when">约 1 小时 · 到时我给完整脚本</span>
+
+  <div class="step">
+    <input type="checkbox">
+    <div class="step-body">
+      <div class="step-title">先用一张静态图确认模型能用</div>
+      <div class="step-note">不要一上来就接视频流。先确认模型本身跑得动，问题范围就缩小到"链路"和"模型"两个独立部分。</div>
+      <div class="trap"><b>必须用 <code class="inline">~/venv/bin/python3</code>，不能用系统 <code class="inline">python3</code>。</b>ultralytics 和 torch 都装在 venv 里，系统 Python 里没有，直接 <code class="inline">python3 -c "import ultralytics"</code> 会报 ModuleNotFoundError。而跑 ROS 节点用系统 Python 更方便，所以这台机器上两种 Python 混着用，每次都要想清楚是哪一种。</div>
+      <div class="code"><button class="copy">复制</button><pre>~/venv/bin/python3 -c "
+from ultralytics import YOLO
+m = YOLO('yolov8n.pt')
+r = m(0, save=True)      # 0 = 摄像头；改成图片路径也行
+print('detected:', len(r[0].boxes))
+"</pre></div>
+      <div class="expect"><b>应该看到：</b>下载 6 MB 的 yolov8n.pt（只需一次），然后打印出检测到的目标数量。结果图存在 <code class="inline">runs/detect/predict/</code> 下。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox">
+    <div class="step-body">
+      <div class="step-title">单独测纯推理耗时</div>
+      <div class="step-note">这个数决定了你的实际帧率上限。CPU 推理要做多次取平均，第一次总是特别慢（预热）。</div>
+      <div class="code"><button class="copy">复制</button><pre>~/venv/bin/python3 -c "
+import time, numpy as np, torch
+from ultralytics import YOLO
+torch.set_num_threads(8)
+m = YOLO('yolov8n.pt')
+x = np.random.randint(0,255,(480,640,3),dtype=np.uint8)
+for _ in range(3): m.predict(x, verbose=False)
+t=time.perf_counter()
+for _ in range(20): m.predict(x, verbose=False)
+print(f'{(time.perf_counter()-t)/20*1000:.1f} ms/帧')
+"</pre></div>
+      <div class="expect"><b>本机实测：<b>17.7 ms</b>（中位；最快 17.1 / 最慢 19.8，8 线程、640 输入、随机权重、预热 3 次后取 12 次中位）。纯 forward 上限约 56 fps，20 fps 的 50 ms 帧间隔只占三分之一。</b>如果明显高于 25 ms，检查 <code class="inline">torch.set_num_threads(8)</code> 是否设了；这颗 8745HS 是 8 核 16 线程，不设的话 torch 可能只用 1 个核。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox">
+    <div class="step-body">
+      <div class="step-title">接上视频流出框</div>
+      <div class="step-note">用 <code class="inline">vision/host/yolo_view.py</code>。<b>先不做网页</b>——窗口或存图里能一眼看出"框有没有画在正确的位置"，而网页里还要多怀疑一层前端。</div>
+      <div class="code"><button class="copy">复制</button><pre># 方式一：存带框图（不需要图形界面，远程也能验证）
+export FASTRTPS_DEFAULT_PROFILES_FILE=$HOME/wire.xml
+~/venv/bin/python3 ~/yolo_view.py --save /tmp/yolo --save-every 20 --seconds 20
+
+# 方式二：在主机屏幕前看本地窗口
+DISPLAY=:0 ~/venv/bin/python3 ~/yolo_view.py --display
+
+# 只检测人（COCO 里 person 是 0）
+~/venv/bin/python3 ~/yolo_view.py --display --classes 0 --conf 0.4</pre></div>
+      <div class="expect"><b>实测输出：</b>19.8~20.0 fps ｜ 推理中位 16.7~19.6 ms ｜ <b>延迟 p50 24.9~37.2 ms</b> ｜ 左下角叠了一行 <code class="inline">fps | infer | lat | obj</code>（分别是渲染帧率、推理毫秒、端到端延迟、本帧目标数）。</div>
+      <div class="trap"><b>第一帧的指标不用当真。</b>刚启动那帧会显示 <code class="inline">infer 900+ ms</code>、<code class="inline">lat 900+ ms</code>——那是模型首次前向的预热开销，加上该帧时间戳已经很旧。从第 3 帧起就稳定在 20 ms 内了。<br><b>单帧大小会随环境光变化：</b>深夜没开灯约 37 KB，白天光线足时约 55 KB（细节多、压缩率低），对应带宽 6 Mbps → 8.6 Mbps。这是正常现象，不是参数变了。</div>
+      <div class="trap"><b>脚本的关键设计：回调只存最新帧，主循环才推理。</b>如果直接在订阅回调里跑 YOLO，executor 会被占住 20 ms，DDS 那边新帧继续到，处理慢于到达就开始积压——就是阶段 4 那个 956 ms 的成因。现在回调只做"覆盖 self.latest 并立刻返回"，慢就丢旧帧，物理上排不了队。</div>
+      <div class="trap"><b>别用 <code class="inline">cv2.putText</code> 写中文类别名</b>，它只支持 ASCII，中文会变成一串问号。脚本直接用 <code class="inline">res[0].plot()</code>，框、颜色、标签、置信度都由 ultralytics 画好，最省事也最不容易错位。</div>
+    </div>
+  </div>
+
+  <div class="gate">
+    <span class="lbl">阶段 5 验收门 · 已通过</span>
+    <p>2026-11-26 实测：<b>19.8 fps ｜ 推理 17.6 ms ｜ 端到端延迟 p50 35.5 ms ｜ 143 帧检出 170 个目标</b>。框位置核对过：<code class="inline">person 0.75</code> 的框上沿在头顶上方一点、左右边界贴着两肩外缘，没有偏移；不同时刻抓的帧里框的位置和大小都在变，说明是实时跟随而不是画死的。</p>
+    <p style="margin-top:6px">模型是 80 类 COCO（<code class="inline">yolov8n.pt</code>，6.3 MB）。至此"链路 → 推理 → 画框"整条都验证过了，阶段 6 只需要把同样的三步搬进 WebSocket。</p>
+    <p style="margin-top:6px; color:var(--warn)"><b>顺手记一条经验：</b>默认 <code class="inline">conf=0.25</code> 偏宽松，容易把耳机、桌面杂物误判成 <code class="inline">cell phone</code>（实测出现过 <code class="inline">0.47</code> 的误检）。观察场景建议把 <code class="inline">--conf</code> 提到 <b>0.4~0.5</b>，或者直接用 <code class="inline">--classes 0</code> 只检测人。</p>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="stage-head"><span class="num">6</span><h2>换成网页界面</h2></div>
+  <p class="stage-sub">目标：浏览器打开一个地址就能看画面和检测结果，同一个网络里任何设备都能看。</p>
+  <span class="when">已完成 · 实测 19.9 fps / 推理 24.2 ms / 延迟 24.6 ms</span>
+
+  <div class="trap" style="margin:0 0 18px"><b>核心设计：框不在服务端画，而是发原图 + 框坐标，让浏览器画。</b>
+  服务端把摄像头原始的 JPEG 字节和检测框 JSON 装进<b>同一条 WebSocket 二进制消息</b>，前端拿到后先贴图、再按同一帧的坐标画框。
+  三个好处：① 省掉服务端一次「编码带框图」的开销（15~25 ms）；② 框是矢量的，缩放不糊，标签能用任意字体；③
+  <b>框和画面来自同一条消息，物理上不可能错位</b>——这是选这个协议的核心理由，不是顺手为之。</div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">① 两个文件放到位</div>
+      <div class="step-note">后端 <code class="inline">vision/host/web_server.py</code>，前端 <code class="inline">vision/host/web/index.html</code>。前端必须放在后端同级目录的 <code class="inline">web/</code> 下，服务按这个相对路径找它。</div>
+      <div class="code"><button class="copy">复制</button><pre># 从 Windows 拷到主机（在 Git Bash 里跑）
+scp vision/host/web_server.py &lt;用户&gt;@&lt;主机IP&gt;:~/
+ssh &lt;用户&gt;@&lt;主机IP&gt; 'mkdir -p ~/web'
+scp vision/host/web/index.html &lt;用户&gt;@&lt;主机IP&gt;:~/web/</pre></div>
+      <div class="expect"><b>目录结构：</b><code class="inline">~/web_server.py</code> 与 <code class="inline">~/web/index.html</code> 必须并存，位置错一个就会打开页面 404。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">② 先补一条订阅依赖，再启动服务</div>
+      <div class="step-note">FastAPI 处理 WebSocket 要 <code class="inline">websockets</code> 或 <code class="inline">wsproto</code>。装 uvicorn 时用 <code class="inline">uvicorn[standard]</code> 就已经含了；如果只装了裸 <code class="inline">uvicorn</code>，启动会报 <code class="inline">No supported WebSocket library detected</code>。</div>
+      <div class="code"><button class="copy">复制</button><pre>~/venv/bin/pip install "uvicorn[standard]"
+
+# 启动（后台，日志在 /tmp/web.log）
+nohup bash ~/start_web.sh --port 8000 &gt; /tmp/web.log 2&gt;&amp;1 &amp;
+sleep 10; tail -5 /tmp/web.log</pre></div>
+      <div class="expect"><b>应该看到：</b><code class="inline">服务启动：http://0.0.0.0:8000</code>。用 <code class="inline">curl http://&lt;主机IP&gt;:8000/health</code> 应返回 <code class="inline">{"ok":true,"frames":N,"ver":N}</code>，<code class="inline">frames</code> 在持续增长说明 DDS 收得到帧。</div>
+      <div class="trap"><b><code class="inline">frames</code> 一直是 0：</b>DDS 没通或话题名不对。先确认 <code class="inline">FASTRTPS_DEFAULT_PROFILES_FILE</code> 已设，再 <code class="inline">ros2 topic list</code> 看 <code class="inline">/image_raw/compressed</code> 在不在。服务本身没崩，不要重启它。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" checked>
+    <div class="step-body">
+      <div class="step-title">③ 浏览器打开</div>
+      <div class="code"><button class="copy">复制</button><pre>http://&lt;主机IP&gt;:8000          # 例如 http://&lt;主机IP&gt;:8000</pre></div>
+      <div class="expect"><b>实测结果：</b>顶部状态栏绿点 + <b>已连接</b>，渲染 <b>19.9 fps</b>、推理 <b>24.2 ms</b>、延迟 <b>24.6 ms</b>、目标数同步；画面里红色框 <code class="inline">person 0.70</code> 准确罩住人；右下角目标列表与框一致。</div>
+      <div class="trap"><b>页面能开但画面区域一直是"等待视频流"：</b>说明 HTTP 通了但 WebSocket 没数据。<code class="inline">/health</code> 里 <code class="inline">frames</code> 有增长就是前端问题（看浏览器 F12 的 Console），<code class="inline">frames</code> 不涨就是后端收不到帧。<br><b>状态栏显示"已断开，重连中"：</b>服务进程挂了，看 <code class="inline">/tmp/web.log</code>。</div>
+    </div>
+  </div>
+
+  <div class="gate">
+    <span class="lbl">最终验收门 · 已通过</span>
+    <p>2026-11-26 实测：浏览器打开 <code class="inline">http://&lt;主机IP&gt;:8000</code>，画面流畅（<b>19.9 fps</b>）、框准确（<code class="inline">person 0.70</code> 罩住头肩、无偏移）、三个读数正常（推理 <b>24.2 ms</b>、延迟 <b>24.6 ms</b>）。</p>
+    <p style="margin-top:6px">WebSocket 单条消息实测 <b>58004 字节</b> = 4 字节长度前缀 + 184 字节 JSON 头 + 57816 字节 JPEG，头尾 <code class="inline">FF D8 … FF D9</code> 完整。</p>
+    <p style="margin-top:6px; color:var(--ok); font-weight:600">端到端全链路 24.6 ms —— 原定"观察级 120~160 ms"的目标，实际快了 5 倍。</p>
+  </div>
+</div>
+
+<h3>常见故障速查</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th style="width:200px">现象</th><th style="width:170px">最可能的原因</th><th>先查这个</th></tr></thead>
+<tbody>
+<tr><td>usb_cam 报 not a valid V4L2 device</td><td>传了 by-id 符号链接</td><td class="mono">改回 /dev/video0</td></tr>
+<tr><td>usb_cam 一启动就 Segmentation fault</td><td>raw_mjpeg 分支在这版是坏的</td><td class="mono">pixel_format:=yuyv</td></tr>
+<tr><td>v4l2_camera 抛 Unrecognized image encoding</td><td>该包没有 MJPG 解码路径</td><td>换 usb_cam，别调参数</td></tr>
+<tr><td>hz 只有 10 左右且很稳</td><td>曝光受限于光线（不是带宽）</td><td class="mono">exposure_dynamic_framerate=0</td></tr>
+<tr><td>VideoCapture / 节点打不开设备</td><td>设备被占用或不在 video 组</td><td class="mono">sudo usermod -aG video $USER</td></tr>
+<tr><td>两端 ping 通但看不到话题</td><td>DDS 发现失败</td><td class="mono">ROS_STATIC_PEERS + ufw</td></tr>
+<tr><td>venv 里 import rclpy 失败</td><td>建 venv 时漏了 --system-site-packages</td><td>重建 venv</td></tr>
+<tr><td>装 torch 下了 2.5GB</td><td>装成了 CUDA 版</td><td class="mono">--index-url .../whl/cpu</td></tr>
+<tr><td>主机能连树莓派但打不开网页</td><td>有线口填了网关，抢了默认路由</td><td>网关留空</td></tr>
+<tr><td>画面越来越滞后，越跑越慢</td><td>队列积压（推理跟不上采集）</td><td>改成只取最新帧、主动丢帧</td></tr>
+</tbody>
+</table>
+</div>
+
+<footer>
+  路线基于 2026-11-21 ~ 11-24 的讨论整理。阶段 1、3 请务必单独验证通过再往下——这两步是后面所有问题的分界线。<br>
+  配套文件：<code class="inline">vision/pi/check_camera.sh</code>（八项自检）、<code class="inline">vision/pi/start_camera.sh</code>（一键出流）、<code class="inline">vision/host/probe.py</code>（测量探针）、<code class="inline">vision/pi/cam_pub.py</code>（Pi 出流节点）、<code class="inline">vision/host/yolo_view.py</code>（本地出框）、<code class="inline">vision/host/web_server.py</code> + <code class="inline">vision/host/web/index.html</code>（网页界面）、<code class="inline">最终方案-视觉链路.html</code>（架构与决策记录）。
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('.step input[type=checkbox]'));
+  var KEY = 'rpi-vision-roadmap-v1';
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e) { saved = {}; }
+
+  function refresh(){
+    var done = 0;
+    boxes.forEach(function(b, i){
+      var row = b.closest('.step');
+      if (b.checked) { done++; row.classList.add('done'); } else { row.classList.remove('done'); }
+    });
+    var total = boxes.length || 1;
+    document.getElementById('fill').style.width = (done / total * 100) + '%';
+    document.getElementById('count').textContent = done + ' / ' + boxes.length;
+  }
+
+  boxes.forEach(function(b, i){
+    if (saved[i]) b.checked = true;
+    b.addEventListener('change', function(){
+      saved[i] = b.checked;
+      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch(e) {}
+      refresh();
+    });
+  });
+
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var pre = btn.parentElement.querySelector('pre');
+      var text = pre.innerText;
+      var done = function(){
+        btn.textContent = '已复制';
+        setTimeout(function(){ btn.textContent = '复制'; }, 1200);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function(){ fallback(text); done(); });
+      } else { fallback(text); done(); }
+    });
+  });
+
+  function fallback(text){
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+
+  refresh();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+# ── ROS 2 / colcon 构建产物 ────────────────────────────────
+build/
+install/
+log/
+
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+
+# ── 模型权重（体积大，用 scripts/host/fetch_model.sh 按需下载）──
+*.pt
+*.onnx
+
+# ── 备份快照与临时文件 ────────────────────────────────────
+backup/
+*.log
+*.pid
+tmp/
+
+# ── 编辑器与系统 ──────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp

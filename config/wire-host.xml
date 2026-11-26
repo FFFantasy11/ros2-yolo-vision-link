@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Fast DDS 配置：主机端版本（白名单 = 192.168.10.1，主机有线口）
+
+  为什么需要它：
+    两台机器同时开着 WiFi 和网线，Fast DDS 默认会把 UDP 发现包和视频流
+    发到 WiFi 上。实测帧间隔 p99 从 52ms 恶化到 210ms。把 UDP 传输限定在
+    有线口上，WiFi 只留作 SSH 管理通道。
+
+  部署位置：~/vision_project/config/wire.xml（由 scripts/deploy.sh 按机器挑选）
+  使用方式：export FASTRTPS_DEFAULT_PROFILES_FILE=~/vision_project/config/wire.xml
+-->
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <profiles>
+    <transport_descriptors>
+      <transport_descriptor>
+        <transport_id>shm_local</transport_id>
+        <type>SHM</type>
+      </transport_descriptor>
+      <transport_descriptor>
+        <transport_id>udp_wire</transport_id>
+        <type>UDPv4</type>
+        <interfaceWhiteList>
+          <address>192.168.10.1</address>
+        </interfaceWhiteList>
+      </transport_descriptor>
+    </transport_descriptors>
+    <participant profile_name="wire_only" is_default_profile="true">
+      <rtps>
+        <userTransports>
+          <transport_id>shm_local</transport_id>
+          <transport_id>udp_wire</transport_id>
+        </userTransports>
+        <useBuiltinTransports>false</useBuiltinTransports>
+      </rtps>
+    </participant>
+  </profiles>
+</dds>
